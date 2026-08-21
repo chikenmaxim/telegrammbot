@@ -1,4 +1,3 @@
-﻿```yaml
 services:
   - type: worker
     name: telegram-queue-bot
@@ -14,4 +13,3 @@ services:
         sync: false
       - key: STRING_SESSION
         sync: false
-```
