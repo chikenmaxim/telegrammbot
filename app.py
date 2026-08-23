@@ -33,7 +33,7 @@ def ping_self():
     чтобы Render не усыпил бота.
     """
     while True:
-        time.sleep(600)  # 10 минут
+        time.sleep(180)  # 10 минут
         try:
             port = os.environ.get('PORT', 5000)
             url = f"http://localhost:{port}/health"
