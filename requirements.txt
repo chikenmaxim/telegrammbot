@@ -2,4 +2,4 @@ aiogram
 requests
 telethon
 py-tgcalls
-aiohttp
+Flask
