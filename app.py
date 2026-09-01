@@ -11,7 +11,7 @@ from bot import main as bot_main
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
-# === Эндпоинты для пингов ===
+# === Эндпоинты ===
 @app.route('/')
 def home():
     return "Бот работает!"
@@ -20,18 +20,8 @@ def home():
 def health():
     return "OK", 200
 
-# === Функция для запуска Flask ===
-def run_flask():
-    """Запускает Flask-сервер в фоновом потоке."""
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-
-# === Функция для пинга самого себя ===
+# === Функция самопинга (чтобы бот не засыпал) ===
 def ping_self():
-    """
-    Каждые 10 минут отправляет запрос к своему же /health,
-    чтобы Render не усыпил бота.
-    """
     while True:
         time.sleep(120)  # 10 минут
         try:
@@ -42,21 +32,21 @@ def ping_self():
         except Exception as e:
             logging.warning(f"Self-ping failed: {e}")
 
-# === Точка входа ===
-if __name__ == '__main__':
-    # 1. Запускаем Flask в фоновом потоке (чтобы не мешать боту)
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
+# === Функция запуска бота в отдельном потоке ===
+def start_bot():
+    """Запускает асинхронного бота в фоновом потоке."""
+    def run():
+        try:
+            asyncio.run(bot_main())
+        except Exception as e:
+            logging.error(f"Ошибка бота: {e}")
     
-    # 2. Запускаем поток для пинга самого себя
-    ping_thread = threading.Thread(target=ping_self, daemon=True)
-    ping_thread.start()
-    
-    # 3. Запускаем бота в ОСНОВНОМ потоке (Telethon будет доволен)
-    try:
-        asyncio.run(bot_main())
-    except KeyboardInterrupt:
-        print("Бот остановлен.")
-    except Exception as e:
-        logging.error(f"Ошибка бота: {e}")
-        raise
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    logging.info("Бот запущен в фоновом потоке")
+
+# === Запускаем бота и самопинг ПРИ ИМПОРТЕ ===
+# Это сработает, когда gunicorn загрузит этот файл
+start_bot()
+ping_thread = threading.Thread(target=ping_self, daemon=True)
+ping_thread.start()
