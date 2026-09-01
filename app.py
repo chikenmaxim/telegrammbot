@@ -1,52 +1,55 @@
 import os
 import asyncio
 import logging
-import threading
 import time
-import requests
-from flask import Flask
+from aiohttp import web
 from bot import main as bot_main
 
-# Настройка логгирования
 logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
 
-# === Эндпоинты ===
-@app.route('/')
-def home():
-    return "Бот работает!"
+# === Обработчики веб-запросов ===
+async def handle_home(request):
+    return web.Response(text="Бот работает!")
 
-@app.route('/health')
-def health():
-    return "OK", 200
+async def handle_health(request):
+    return web.Response(text="OK", status=200)
 
-# === Функция самопинга (чтобы бот не засыпал) ===
-def ping_self():
+# === Самопинг ===
+async def ping_self(app):
+    """Каждые 10 минут отправляем запрос к /health, чтобы не уснуть."""
     while True:
-        time.sleep(120)  # 10 минут
+        await asyncio.sleep(120)  # 10 минут
         try:
             port = os.environ.get('PORT', 5000)
-            url = f"http://localhost:{port}/health"
-            requests.get(url, timeout=5)
+            async with aiohttp.ClientSession() as session:
+                await session.get(f"http://localhost:{port}/health")
             logging.info("Self-ping successful")
         except Exception as e:
             logging.warning(f"Self-ping failed: {e}")
 
-# === Функция запуска бота в отдельном потоке ===
-def start_bot():
-    """Запускает асинхронного бота в фоновом потоке."""
-    def run():
-        try:
-            asyncio.run(bot_main())
-        except Exception as e:
-            logging.error(f"Ошибка бота: {e}")
+# === Запуск бота и веб-сервера в одном цикле ===
+async def main():
+    # Запускаем веб-сервер
+    app = web.Application()
+    app.router.add_get('/', handle_home)
+    app.router.add_get('/health', handle_health)
     
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
-    logging.info("Бот запущен в фоновом потоке")
+    # Запускаем самопинг как фоновую задачу
+    asyncio.create_task(ping_self(app))
+    
+    # Запускаем бота в фоновой задаче (но теперь он будет в том же цикле)
+    bot_task = asyncio.create_task(bot_main())
+    
+    # Запускаем веб-сервер
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get('PORT', 5000)))
+    await site.start()
+    
+    logging.info("Flask заменён на aiohttp, бот запущен в том же цикле")
+    
+    # Ждём, пока бот работает (бесконечно)
+    await bot_task
 
-# === Запускаем бота и самопинг ПРИ ИМПОРТЕ ===
-# Это сработает, когда gunicorn загрузит этот файл
-start_bot()
-ping_thread = threading.Thread(target=ping_self, daemon=True)
-ping_thread.start()
+if __name__ == '__main__':
+    asyncio.run(main())
